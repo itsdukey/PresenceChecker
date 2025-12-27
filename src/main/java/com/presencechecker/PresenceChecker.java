@@ -19,9 +19,10 @@ import net.runelite.api.Client;
 import net.runelite.api.FriendsChatManager;
 import net.runelite.api.FriendsChatMember;
 import net.runelite.api.FriendsChatRank;
+import net.runelite.api.WorldView;
 import net.runelite.api.events.CommandExecuted;
+import net.runelite.api.widgets.ComponentID;
 import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
@@ -77,13 +78,15 @@ public class PresenceChecker extends Plugin
     private ScheduledFuture<?> overlayTask;
 
     @Provides
+    @SuppressWarnings("unused") // Used by Guice
     PresenceCheckerConfig provideConfig(ConfigManager configManager)
     {
         return configManager.getConfig(PresenceCheckerConfig.class);
     }
 
     @Override
-    protected void startUp() throws Exception
+    @SuppressWarnings("unused") // Used by RuneLite
+    protected void startUp()
     {
         // Register Overlay
         overlayManager.add(overlay);
@@ -121,7 +124,7 @@ public class PresenceChecker extends Plugin
     }
 
     @Override
-    protected void shutDown() throws Exception
+    protected void shutDown()
     {
         if (overlayTask != null)
         {
@@ -133,6 +136,7 @@ public class PresenceChecker extends Plugin
     }
 
     @Subscribe
+    @SuppressWarnings("unused") // Used by EventBus
     public void onCommandExecuted(CommandExecuted commandExecuted)
     {
         String command = commandExecuted.getCommand();
@@ -145,8 +149,8 @@ public class PresenceChecker extends Plugin
     private void backgroundScan()
     {
         clientThread.invokeLater(() -> {
-            List<FriendsChatMember> missing = scanForMissingMembers();
-            lastMissingMembers = missing;
+            // FIX: Removed redundant variable 'missing'
+            lastMissingMembers = scanForMissingMembers();
         });
     }
 
@@ -217,7 +221,14 @@ public class PresenceChecker extends Plugin
             return Collections.emptyList();
         }
 
-        List<String> localPlayerNames = client.getPlayers().stream()
+        // FIX: Replaced client.getPlayers() with client.getTopLevelWorldView().players()
+        WorldView worldView = client.getTopLevelWorldView();
+        if (worldView == null)
+        {
+            return Collections.emptyList();
+        }
+
+        List<String> localPlayerNames = worldView.players().stream()
                 .map(p -> Text.standardize(p.getName()))
                 .collect(Collectors.toList());
 
@@ -246,19 +257,23 @@ public class PresenceChecker extends Plugin
         return missing;
     }
 
+    @SuppressWarnings("unused")
     public int getMissingMembersCount()
     {
         return lastMissingMembers.size();
     }
 
+    @SuppressWarnings("unused")
     public List<FriendsChatMember> getMissingMembers()
     {
         return lastMissingMembers;
     }
 
+    // FIX: Suppress deprecation warning for ComponentID until InterfaceID is standardized
+    @SuppressWarnings("deprecation")
     private void highlightMissingMembers(List<FriendsChatMember> missingMembers)
     {
-        Widget list = client.getWidget(WidgetInfo.FRIENDS_CHAT_LIST);
+        Widget list = client.getWidget(ComponentID.FRIENDS_CHAT_LIST);
         if (list == null || list.getDynamicChildren() == null)
         {
             return;
