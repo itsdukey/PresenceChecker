@@ -70,6 +70,18 @@ public interface PresenceCheckerConfig extends Config
         return new Color(128, 0, 128); // Default Purple
     }
 
+    @ConfigItem(
+            keyName = "highlightDuration",
+            name = "Highlight Duration",
+            description = "How many seconds to keep names highlighted before letting them revert (0 to disable).",
+            position = 4,
+            section = generalSettings
+    )
+    default int highlightDuration()
+    {
+        return 5;
+    }
+
     // --- CHAT FILTER SECTION ---
 
     @ConfigItem(
