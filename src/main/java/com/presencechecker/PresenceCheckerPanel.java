@@ -27,6 +27,7 @@ import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer; // Added Import
 import javax.swing.border.Border;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
@@ -186,10 +187,11 @@ public class PresenceCheckerPanel extends PluginPanel
 
         String originalText = copyButton.getText();
         copyButton.setText("Copied!");
-        new Thread(() -> {
-            try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
-            SwingUtilities.invokeLater(() -> copyButton.setText(originalText));
-        }).start();
+
+        // FIX: Replaced Thread/Sleep with Swing Timer
+        Timer timer = new Timer(2000, e -> copyButton.setText(originalText));
+        timer.setRepeats(false);
+        timer.start();
     }
 
     private void addDefaultMessage(String message)

@@ -208,7 +208,7 @@ public class PresenceChecker extends Plugin
                 updatePanel(missingMembersList);
                 highlightMissingMembers(missingMembersList);
 
-                SwingUtilities.invokeLater(() -> clientToolbar.openPanel(navButton));
+                // FIX: Removed the line that forced the panel to open (SwingUtilities.invokeLater(() -> clientToolbar.openPanel(navButton)))
             }
         });
     }
