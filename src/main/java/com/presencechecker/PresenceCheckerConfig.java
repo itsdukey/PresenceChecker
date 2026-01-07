@@ -240,4 +240,87 @@ public interface PresenceCheckerConfig extends Config
             section = suspiciousSettings
     )
     default int suspiciousThreshold() { return 4; }
+
+    // --- SUSPICIOUS RANK FILTERS ---
+
+    @ConfigItem(
+            keyName = "susHideOwner",
+            name = "Hide Owners",
+            description = "Do not flag Owners as suspicious.",
+            position = 2,
+            section = suspiciousSettings
+    )
+    default boolean susHideOwner() { return true; }
+
+    @ConfigItem(
+            keyName = "susHideGeneral",
+            name = "Hide Generals",
+            description = "Do not flag Generals as suspicious.",
+            position = 3,
+            section = suspiciousSettings
+    )
+    default boolean susHideGeneral() { return true; }
+
+    @ConfigItem(
+            keyName = "susHideCaptain",
+            name = "Hide Captains",
+            description = "Do not flag Captains as suspicious.",
+            position = 4,
+            section = suspiciousSettings
+    )
+    default boolean susHideCaptain() { return true; }
+
+    @ConfigItem(
+            keyName = "susHideLieutenant",
+            name = "Hide Lieutenants",
+            description = "Do not flag Lieutenants as suspicious.",
+            position = 5,
+            section = suspiciousSettings
+    )
+    default boolean susHideLieutenant() { return true; }
+
+    @ConfigItem(
+            keyName = "susHideSergeant",
+            name = "Hide Sergeants",
+            description = "Do not flag Sergeants as suspicious.",
+            position = 6,
+            section = suspiciousSettings
+    )
+    default boolean susHideSergeant() { return true; }
+
+    @ConfigItem(
+            keyName = "susHideCorporal",
+            name = "Hide Corporals",
+            description = "Do not flag Corporals as suspicious.",
+            position = 7,
+            section = suspiciousSettings
+    )
+    default boolean susHideCorporal() { return false; }
+
+    @ConfigItem(
+            keyName = "susHideRecruit",
+            name = "Hide Recruits",
+            description = "Do not flag Recruits as suspicious.",
+            position = 8,
+            section = suspiciousSettings
+    )
+    default boolean susHideRecruit() { return false; }
+
+    @ConfigItem(
+            keyName = "susHideFriend",
+            name = "Hide Friends",
+            description = "Do not flag Friends as suspicious.",
+            position = 9,
+            section = suspiciousSettings
+    )
+    default boolean susHideFriend() { return false; }
+
+    @ConfigItem(
+            keyName = "susHideGuest",
+            name = "Hide Guests",
+            description = "Do not flag Guests (Unranked) as suspicious.",
+            position = 10,
+            section = suspiciousSettings
+    )
+    default boolean susHideGuest() { return false; }
 }

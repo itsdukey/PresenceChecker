@@ -160,6 +160,13 @@ public class PresenceChecker extends Plugin
         {
             return;
         }
+
+        // Don't track if the rank is ignored immediately
+        if (shouldIgnoreSuspiciousRank(event.getMember().getRank()))
+        {
+            return;
+        }
+
         String name = Text.standardize(event.getMember().getName());
         joinTimes.put(name, System.currentTimeMillis());
     }
@@ -171,6 +178,13 @@ public class PresenceChecker extends Plugin
         {
             return;
         }
+
+        // Double check rank in case they ranked up/down (though unlikely in seconds)
+        if (shouldIgnoreSuspiciousRank(event.getMember().getRank()))
+        {
+            return;
+        }
+
         String name = Text.standardize(event.getMember().getName());
         Long joinTime = joinTimes.remove(name);
 
@@ -200,6 +214,23 @@ public class PresenceChecker extends Plugin
     {
         suspiciousUsers.clear();
         SwingUtilities.invokeLater(() -> panel.updateSuspiciousList(suspiciousUsers));
+    }
+
+    private boolean shouldIgnoreSuspiciousRank(FriendsChatRank rank)
+    {
+        switch (rank)
+        {
+            case OWNER: return config.susHideOwner();
+            case GENERAL: return config.susHideGeneral();
+            case CAPTAIN: return config.susHideCaptain();
+            case LIEUTENANT: return config.susHideLieutenant();
+            case SERGEANT: return config.susHideSergeant();
+            case CORPORAL: return config.susHideCorporal();
+            case RECRUIT: return config.susHideRecruit();
+            case FRIEND: return config.susHideFriend();
+            case UNRANKED: return config.susHideGuest();
+            default: return config.susHideGuest();
+        }
     }
 
     // --- END SUSPICIOUS ACTIVITY LOGIC ---
