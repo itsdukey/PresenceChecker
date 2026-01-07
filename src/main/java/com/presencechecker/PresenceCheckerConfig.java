@@ -5,6 +5,7 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
+import net.runelite.client.config.Range;
 
 @ConfigGroup("presencechecker")
 public interface PresenceCheckerConfig extends Config
@@ -31,6 +32,13 @@ public interface PresenceCheckerConfig extends Config
             position = 2
     )
     String overlaySettings = "overlaySettings";
+
+    @ConfigSection(
+            name = "Suspicious Activity",
+            description = "Tracker for players quickly joining and leaving.",
+            position = 3
+    )
+    String suspiciousSettings = "suspiciousSettings";
 
     // --- GENERAL SETTINGS ---
 
@@ -68,6 +76,18 @@ public interface PresenceCheckerConfig extends Config
     default Color getHighlightColor()
     {
         return new Color(128, 0, 128); // Default Purple
+    }
+
+    @ConfigItem(
+            keyName = "highlightDuration",
+            name = "Highlight Duration",
+            description = "How many seconds to keep names highlighted before letting them revert (0 to disable).",
+            position = 4,
+            section = generalSettings
+    )
+    default int highlightDuration()
+    {
+        return 5;
     }
 
     // --- CHAT FILTER SECTION ---
@@ -196,4 +216,28 @@ public interface PresenceCheckerConfig extends Config
             section = overlaySettings
     )
     default int overlayNamesLimit() { return 5; }
+
+    // --- SUSPICIOUS ACTIVITY SECTION ---
+
+    @ConfigItem(
+            keyName = "enableSuspiciousTracking",
+            name = "Enable Tracking",
+            description = "Turn the suspicious activity tracking on or off.",
+            position = 0,
+            section = suspiciousSettings
+    )
+    default boolean enableSuspiciousTracking() { return true; }
+
+    @Range(
+            min = 1,
+            max = 10
+    )
+    @ConfigItem(
+            keyName = "suspiciousThreshold",
+            name = "Suspicious Time (Sec)",
+            description = "If a user joins and leaves within this many seconds, they are flagged.",
+            position = 1,
+            section = suspiciousSettings
+    )
+    default int suspiciousThreshold() { return 4; }
 }

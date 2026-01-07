@@ -26,12 +26,8 @@ import javax.swing.JPanel;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
-import javax.swing.SwingUtilities;
-import javax.swing.Timer; // Added Import
-import javax.swing.border.Border;
-import javax.swing.border.CompoundBorder;
+import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.MatteBorder;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import net.runelite.api.FriendsChatMember;
 import net.runelite.api.FriendsChatRank;
@@ -41,12 +37,25 @@ import net.runelite.client.ui.PluginPanel;
 
 public class PresenceCheckerPanel extends PluginPanel
 {
-    private final JPanel listContainer = new JPanel();
-    private final List<String> currentListText = new ArrayList<>();
-    private final JButton copyButton = new JButton("Copy All");
+    // --- Main Layout Container ---
+    private final JPanel contentPanel = new JPanel();
+
+    // --- Missing Members Components ---
+    private final JPanel missingListContainer = new JPanel();
+    private final List<String> currentMissingText = new ArrayList<>();
+    private final JButton copyMissingButton = new JButton("Copy All");
+    private final JButton clearMissingButton = new JButton("Clear Names");
     private final JButton refreshButton = new JButton("Refresh");
+
+    // --- Suspicious Activity Components ---
+    private final JPanel suspiciousListContainer = new JPanel();
+    private final List<String> currentSuspiciousText = new ArrayList<>();
+    private final JButton copySuspiciousButton = new JButton("Copy Names");
+    private final JButton clearSuspiciousButton = new JButton("Clear Names");
+
     private final JScrollPane scrollPane;
     private Runnable refreshAction;
+    private Runnable clearSuspiciousAction;
 
     @Inject
     public PresenceCheckerPanel()
@@ -56,71 +65,176 @@ public class PresenceCheckerPanel extends PluginPanel
 
         setLayout(new BorderLayout());
         setBackground(ColorScheme.DARK_GRAY_COLOR);
+        // Remove default border to allow scrollbar to touch edges if desired,
+        // or keep small border.
         setBorder(new EmptyBorder(10, 10, 10, 10));
 
-        // --- Header Panel ---
-        JPanel headerPanel = new JPanel(new BorderLayout(0, 8));
-        headerPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        headerPanel.setBorder(new EmptyBorder(0, 0, 10, 0));
+        // Use GridBagLayout for the main content to strictly control vertical stacking
+        contentPanel.setLayout(new GridBagLayout());
+        contentPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        JLabel titleLabel = new JLabel("Missing Members");
-        titleLabel.setForeground(Color.WHITE);
-        titleLabel.setFont(FontManager.getRunescapeBoldFont());
-        titleLabel.setHorizontalAlignment(JLabel.CENTER);
+        GridBagConstraints c = new GridBagConstraints();
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1;
+        c.gridx = 0;
+        c.insets = new Insets(0, 0, 0, 0);
 
-        // Button Container (Grid for even spacing)
-        JPanel buttonPanel = new JPanel(new GridLayout(1, 2, 8, 0));
-        buttonPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        // =================================================================
+        // SECTION 1: SUSPICIOUS ACTIVITY (Now at Top)
+        // =================================================================
 
-        // Style the Refresh Button
-        styleButton(refreshButton);
-        refreshButton.setToolTipText("Re-check for missing members");
-        refreshButton.addActionListener(e -> {
-            if (refreshAction != null)
-            {
-                refreshAction.run();
-            }
-        });
+        // 1. Header
+        c.gridy = 0;
+        contentPanel.add(createSuspiciousHeader(), c);
 
-        // Style the Copy Button
-        styleButton(copyButton);
-        copyButton.setToolTipText("Copy the list to clipboard");
-        copyButton.addActionListener(e -> copyToClipboard());
+        // 2. List Container
+        suspiciousListContainer.setLayout(new GridBagLayout());
+        suspiciousListContainer.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        buttonPanel.add(refreshButton);
-        buttonPanel.add(copyButton);
+        c.gridy = 1;
+        // Add some bottom padding between this list and the divider
+        c.insets = new Insets(0, 0, 15, 0);
+        contentPanel.add(suspiciousListContainer, c);
 
-        headerPanel.add(titleLabel, BorderLayout.NORTH);
-        headerPanel.add(buttonPanel, BorderLayout.SOUTH);
+        // =================================================================
+        // SECTION 2: DIVIDER
+        // =================================================================
+        JPanel divider = new JPanel(new BorderLayout());
+        divider.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        JPanel line = new JPanel();
+        line.setBackground(ColorScheme.MEDIUM_GRAY_COLOR);
+        line.setPreferredSize(new Dimension(0, 1));
+        divider.add(line, BorderLayout.CENTER);
 
-        // --- List Container ---
-        listContainer.setLayout(new GridBagLayout());
-        listContainer.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        c.gridy = 2;
+        c.insets = new Insets(0, 0, 15, 0); // Padding below line
+        contentPanel.add(divider, c);
 
-        // Wrapper Panel (North) - Forces items to top
-        JPanel contentWrapper = new JPanel(new BorderLayout());
-        contentWrapper.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        contentWrapper.add(listContainer, BorderLayout.NORTH);
+        // =================================================================
+        // SECTION 3: MISSING MEMBERS (Now at Bottom)
+        // =================================================================
 
-        // --- Scroll Pane ---
-        scrollPane = new JScrollPane(contentWrapper);
+        // 1. Header
+        c.gridy = 3;
+        c.insets = new Insets(0, 0, 0, 0);
+        contentPanel.add(createMissingHeader(), c);
+
+        // 2. List Container
+        missingListContainer.setLayout(new GridBagLayout());
+        missingListContainer.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        c.gridy = 4;
+        contentPanel.add(missingListContainer, c);
+
+        // =================================================================
+        // SECTION 4: INVISIBLE FILLER (Fixes the "Huge Space" issue)
+        // =================================================================
+        // This component consumes all remaining vertical space, forcing
+        // the components above to pack tightly to the top.
+        JPanel filler = new JPanel();
+        filler.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        c.gridy = 5;
+        c.weighty = 1; // IMPORTANT: Consumes extra vertical space
+        c.fill = GridBagConstraints.BOTH;
+        contentPanel.add(filler, c);
+
+        // =================================================================
+        // SCROLL PANE SETUP
+        // =================================================================
+        scrollPane = new JScrollPane(contentPanel);
         scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         scrollPane.setBorder(new EmptyBorder(0, 0, 0, 0));
         scrollPane.setBackground(ColorScheme.DARK_GRAY_COLOR);
-
-        // FIX: Force the ScrollBar to use our custom Dark UI
         scrollPane.setVerticalScrollBar(new DarkScrollBar());
 
-        add(headerPanel, BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
 
-        // Updated default message to match new command
-        addDefaultMessage("Run ::absent or Refresh.");
+        // Initialize Defaults
+        addDefaultMessage(suspiciousListContainer, "No recent suspicious activity.");
+        addDefaultMessage(missingListContainer, "Run ::absent or Refresh.");
+
+        updateButtonsState();
+    }
+
+    private JPanel createSuspiciousHeader()
+    {
+        JPanel panel = new JPanel(new BorderLayout(0, 8));
+        panel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        panel.setBorder(new EmptyBorder(0, 0, 5, 0));
+
+        JLabel title = new JLabel("Suspicious Activity");
+        title.setForeground(Color.ORANGE);
+        title.setFont(FontManager.getRunescapeBoldFont());
+        title.setHorizontalAlignment(JLabel.CENTER);
+
+        JPanel btnPanel = new JPanel(new GridLayout(1, 2, 8, 0));
+        btnPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        styleButton(copySuspiciousButton);
+        copySuspiciousButton.addActionListener(e -> copyToClipboard(currentSuspiciousText, copySuspiciousButton));
+
+        styleButton(clearSuspiciousButton);
+        clearSuspiciousButton.addActionListener(e -> {
+            if (clearSuspiciousAction != null) clearSuspiciousAction.run();
+        });
+
+        btnPanel.add(copySuspiciousButton);
+        btnPanel.add(clearSuspiciousButton);
+
+        panel.add(title, BorderLayout.NORTH);
+        panel.add(btnPanel, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    private JPanel createMissingHeader()
+    {
+        JPanel panel = new JPanel(new BorderLayout(0, 8));
+        panel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        panel.setBorder(new EmptyBorder(0, 0, 5, 0));
+
+        JLabel title = new JLabel("Missing Members");
+        title.setForeground(Color.WHITE);
+        title.setFont(FontManager.getRunescapeBoldFont());
+        title.setHorizontalAlignment(JLabel.CENTER);
+
+        JPanel btnContainer = new JPanel(new BorderLayout(0, 4));
+        btnContainer.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        styleButton(refreshButton);
+        refreshButton.setToolTipText("Re-check for missing members");
+        refreshButton.addActionListener(e -> {
+            if (refreshAction != null) refreshAction.run();
+        });
+
+        JPanel subBtnPanel = new JPanel(new GridLayout(1, 2, 4, 0));
+        subBtnPanel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        styleButton(copyMissingButton);
+        copyMissingButton.addActionListener(e -> copyToClipboard(currentMissingText, copyMissingButton));
+
+        styleButton(clearMissingButton);
+        clearMissingButton.addActionListener(e -> clearMissingList());
+
+        subBtnPanel.add(copyMissingButton);
+        subBtnPanel.add(clearMissingButton);
+
+        btnContainer.add(refreshButton, BorderLayout.NORTH);
+        btnContainer.add(subBtnPanel, BorderLayout.CENTER);
+
+        panel.add(title, BorderLayout.NORTH);
+        panel.add(btnContainer, BorderLayout.SOUTH);
+        return panel;
     }
 
     public void setRefreshAction(Runnable action)
     {
         this.refreshAction = action;
+    }
+
+    public void setClearSuspiciousAction(Runnable action)
+    {
+        this.clearSuspiciousAction = action;
     }
 
     private void styleButton(JButton btn)
@@ -133,10 +247,34 @@ public class PresenceCheckerPanel extends PluginPanel
         btn.setBorder(new EmptyBorder(6, 6, 6, 6));
     }
 
-    public void updateList(List<FriendsChatMember> members)
+    private void updateButtonsState()
     {
-        listContainer.removeAll();
-        currentListText.clear();
+        boolean hasMissing = !currentMissingText.isEmpty();
+        copyMissingButton.setEnabled(hasMissing);
+        clearMissingButton.setEnabled(hasMissing);
+        if (!hasMissing) copyMissingButton.setText("Copy All");
+
+        boolean hasSuspicious = !currentSuspiciousText.isEmpty();
+        copySuspiciousButton.setEnabled(hasSuspicious);
+        clearSuspiciousButton.setEnabled(hasSuspicious);
+        if (!hasSuspicious) copySuspiciousButton.setText("Copy Names");
+    }
+
+    // --- LOGIC: CLEAR MISSING LIST ---
+    private void clearMissingList()
+    {
+        missingListContainer.removeAll();
+        currentMissingText.clear();
+        addDefaultMessage(missingListContainer, "Run ::absent or Refresh.");
+        updateButtonsState();
+        revalidateContainer(missingListContainer);
+    }
+
+    // --- UPDATE MISSING LIST ---
+    public void updateMissingList(List<FriendsChatMember> members)
+    {
+        missingListContainer.removeAll();
+        currentMissingText.clear();
 
         GridBagConstraints c = new GridBagConstraints();
         c.fill = GridBagConstraints.HORIZONTAL;
@@ -147,56 +285,81 @@ public class PresenceCheckerPanel extends PluginPanel
 
         if (members.isEmpty())
         {
-            addDefaultMessage("No missing members.");
-            copyButton.setEnabled(false);
-            copyButton.setText("Copy All");
+            addDefaultMessage(missingListContainer, "No missing members.");
         }
         else
         {
-            copyButton.setEnabled(true);
-            copyButton.setText("Copy (" + members.size() + ")");
-
+            copyMissingButton.setText("Copy (" + members.size() + ")");
             for (FriendsChatMember member : members)
             {
                 String rankPrefix = getRankPrefix(member.getRank());
                 String displayText = rankPrefix + member.getName();
-                currentListText.add(displayText);
+                currentMissingText.add(displayText);
 
-                listContainer.add(createRow(displayText, !rankPrefix.isEmpty()), c);
+                missingListContainer.add(createRow(displayText, !rankPrefix.isEmpty()), c);
                 c.gridy++;
             }
         }
-
-        JPanel filler = new JPanel();
-        filler.setBackground(ColorScheme.DARK_GRAY_COLOR);
-        c.weighty = 1;
-        c.fill = GridBagConstraints.BOTH;
-        listContainer.add(filler, c);
-
-        listContainer.revalidate();
-        listContainer.repaint();
+        updateButtonsState();
+        revalidateContainer(missingListContainer);
     }
 
-    private void copyToClipboard()
+    // --- UPDATE SUSPICIOUS LIST ---
+    public void updateSuspiciousList(List<String> names)
     {
-        if (currentListText.isEmpty()) return;
+        suspiciousListContainer.removeAll();
+        currentSuspiciousText.clear();
+        currentSuspiciousText.addAll(names);
 
-        String clipboardString = String.join("\n", currentListText);
+        GridBagConstraints c = new GridBagConstraints();
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1;
+        c.gridx = 0;
+        c.gridy = 0;
+        c.insets = new Insets(0, 0, 5, 0);
+
+        if (names.isEmpty())
+        {
+            addDefaultMessage(suspiciousListContainer, "No recent suspicious activity.");
+        }
+        else
+        {
+            copySuspiciousButton.setText("Copy (" + names.size() + ")");
+            for (String name : names)
+            {
+                suspiciousListContainer.add(createRow(name, false), c);
+                c.gridy++;
+            }
+        }
+        updateButtonsState();
+        revalidateContainer(suspiciousListContainer);
+    }
+
+    private void revalidateContainer(JPanel panel)
+    {
+        panel.revalidate();
+        panel.repaint();
+    }
+
+    private void copyToClipboard(List<String> textList, JButton button)
+    {
+        if (textList.isEmpty()) return;
+
+        String clipboardString = String.join("\n", textList);
         StringSelection stringSelection = new StringSelection(clipboardString);
         Toolkit.getDefaultToolkit().getSystemClipboard().setContents(stringSelection, null);
 
-        String originalText = copyButton.getText();
-        copyButton.setText("Copied!");
+        String originalText = button.getText();
+        button.setText("Copied!");
 
-        // FIX: Replaced Thread/Sleep with Swing Timer
-        Timer timer = new Timer(2000, e -> copyButton.setText(originalText));
+        Timer timer = new Timer(2000, e -> button.setText(originalText));
         timer.setRepeats(false);
         timer.start();
     }
 
-    private void addDefaultMessage(String message)
+    private void addDefaultMessage(JPanel container, String message)
     {
-        listContainer.removeAll();
+        container.removeAll();
         GridBagConstraints c = new GridBagConstraints();
         c.fill = GridBagConstraints.HORIZONTAL;
         c.weightx = 1;
@@ -206,11 +369,9 @@ public class PresenceCheckerPanel extends PluginPanel
         JLabel emptyLabel = new JLabel(message);
         emptyLabel.setForeground(Color.GRAY);
         emptyLabel.setHorizontalAlignment(JLabel.CENTER);
-        emptyLabel.setBorder(new EmptyBorder(20, 0, 20, 0));
+        emptyLabel.setBorder(new EmptyBorder(10, 0, 10, 0));
 
-        listContainer.add(emptyLabel, c);
-        listContainer.revalidate();
-        listContainer.repaint();
+        container.add(emptyLabel, c);
     }
 
     private JPanel createRow(String text, boolean hasRank)
@@ -344,7 +505,6 @@ public class PresenceCheckerPanel extends PluginPanel
                 g2.setColor(THUMB_COLOR);
             }
 
-            // Paint rounded thumb
             g2.fillRoundRect(thumbBounds.x, thumbBounds.y, thumbBounds.width, thumbBounds.height, 8, 8);
             g2.dispose();
         }

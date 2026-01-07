@@ -6,7 +6,9 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -20,7 +22,10 @@ import net.runelite.api.FriendsChatManager;
 import net.runelite.api.FriendsChatMember;
 import net.runelite.api.FriendsChatRank;
 import net.runelite.api.WorldView;
+import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.CommandExecuted;
+import net.runelite.api.events.FriendsChatMemberJoined;
+import net.runelite.api.events.FriendsChatMemberLeft;
 import net.runelite.api.widgets.ComponentID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.callback.ClientThread;
@@ -77,6 +82,14 @@ public class PresenceChecker extends Plugin
     private volatile List<FriendsChatMember> lastMissingMembers = Collections.emptyList();
     private ScheduledFuture<?> overlayTask;
 
+    // Timer variables
+    private long highlightStartTime = 0;
+    private boolean isHighlighting = false;
+
+    // Suspicious Activity Tracking
+    private final Map<String, Long> joinTimes = new HashMap<>();
+    private final List<String> suspiciousUsers = new ArrayList<>();
+
     @Provides
     @SuppressWarnings("unused") // Used by Guice
     PresenceCheckerConfig provideConfig(ConfigManager configManager)
@@ -92,6 +105,7 @@ public class PresenceChecker extends Plugin
         overlayManager.add(overlay);
 
         panel.setRefreshAction(this::checkPresence);
+        panel.setClearSuspiciousAction(this::clearSuspiciousActivity);
 
         BufferedImage icon;
         try
@@ -133,7 +147,62 @@ public class PresenceChecker extends Plugin
         }
         overlayManager.remove(overlay);
         clientToolbar.removeNavigation(navButton);
+        joinTimes.clear();
+        suspiciousUsers.clear();
     }
+
+    // --- EVENT LISTENERS FOR SUSPICIOUS ACTIVITY ---
+
+    @Subscribe
+    public void onFriendsChatMemberJoined(FriendsChatMemberJoined event)
+    {
+        if (!config.enableSuspiciousTracking())
+        {
+            return;
+        }
+        String name = Text.standardize(event.getMember().getName());
+        joinTimes.put(name, System.currentTimeMillis());
+    }
+
+    @Subscribe
+    public void onFriendsChatMemberLeft(FriendsChatMemberLeft event)
+    {
+        if (!config.enableSuspiciousTracking())
+        {
+            return;
+        }
+        String name = Text.standardize(event.getMember().getName());
+        Long joinTime = joinTimes.remove(name);
+
+        if (joinTime != null)
+        {
+            long durationMs = System.currentTimeMillis() - joinTime;
+            long thresholdMs = config.suspiciousThreshold() * 1000L;
+
+            if (durationMs <= thresholdMs)
+            {
+                addSuspiciousUser(event.getMember().getName()); // Use original name for display
+            }
+        }
+    }
+
+    private void addSuspiciousUser(String rawName)
+    {
+        // Avoid duplicates in the list
+        if (!suspiciousUsers.contains(rawName))
+        {
+            suspiciousUsers.add(rawName);
+            SwingUtilities.invokeLater(() -> panel.updateSuspiciousList(suspiciousUsers));
+        }
+    }
+
+    private void clearSuspiciousActivity()
+    {
+        suspiciousUsers.clear();
+        SwingUtilities.invokeLater(() -> panel.updateSuspiciousList(suspiciousUsers));
+    }
+
+    // --- END SUSPICIOUS ACTIVITY LOGIC ---
 
     @Subscribe
     @SuppressWarnings("unused") // Used by EventBus
@@ -146,10 +215,35 @@ public class PresenceChecker extends Plugin
         }
     }
 
+    @Subscribe
+    public void onClientTick(ClientTick event)
+    {
+        if (lastMissingMembers == null || lastMissingMembers.isEmpty())
+        {
+            return;
+        }
+
+        long durationMs = config.highlightDuration() * 1000L;
+        long timeElapsed = System.currentTimeMillis() - highlightStartTime;
+
+        // If time is remaining, KEEP highlighting
+        if (timeElapsed < durationMs)
+        {
+            int highlightColor = config.getHighlightColor().getRGB() & 0xFFFFFF;
+            setMemberColor(lastMissingMembers, highlightColor);
+            isHighlighting = true;
+        }
+        // If time expired AND we were previously highlighting, REVERT to white once
+        else if (isHighlighting)
+        {
+            setMemberColor(lastMissingMembers, 0xFFFFFF); // Revert to White
+            isHighlighting = false;
+        }
+    }
+
     private void backgroundScan()
     {
         clientThread.invokeLater(() -> {
-            // FIX: Removed redundant variable 'missing'
             lastMissingMembers = scanForMissingMembers();
         });
     }
@@ -177,7 +271,11 @@ public class PresenceChecker extends Plugin
             // 2. Update Overlay data
             lastMissingMembers = missingMembersList;
 
-            // 3. Prepare Chat Output
+            // 3. Reset timer
+            highlightStartTime = System.currentTimeMillis();
+            isHighlighting = true;
+
+            // 4. Prepare Chat Output
             List<String> missingMembersChat = new ArrayList<>();
             Color msgColor = config.getMessageColor();
             for (FriendsChatMember member : missingMembersList)
@@ -187,7 +285,7 @@ public class PresenceChecker extends Plugin
                 missingMembersChat.add(rankStr + nameStr);
             }
 
-            // 4. Report results (Chat & Panel)
+            // 5. Report results (Chat & Panel)
             if (missingMembersChat.isEmpty())
             {
                 if (config.showChatMessages())
@@ -206,9 +304,10 @@ public class PresenceChecker extends Plugin
                 }
 
                 updatePanel(missingMembersList);
-                highlightMissingMembers(missingMembersList);
 
-                // FIX: Removed the line that forced the panel to open (SwingUtilities.invokeLater(() -> clientToolbar.openPanel(navButton)))
+                // Apply color immediately (ClientTick will pick it up from here)
+                int highlightColor = config.getHighlightColor().getRGB() & 0xFFFFFF;
+                setMemberColor(missingMembersList, highlightColor);
             }
         });
     }
@@ -221,7 +320,6 @@ public class PresenceChecker extends Plugin
             return Collections.emptyList();
         }
 
-        // FIX: Replaced client.getPlayers() with client.getTopLevelWorldView().players()
         WorldView worldView = client.getTopLevelWorldView();
         if (worldView == null)
         {
@@ -269,30 +367,30 @@ public class PresenceChecker extends Plugin
         return lastMissingMembers;
     }
 
-    // FIX: Suppress deprecation warning for ComponentID until InterfaceID is standardized
+    // Refactored method to apply ANY color (Highlight or White)
     @SuppressWarnings("deprecation")
-    private void highlightMissingMembers(List<FriendsChatMember> missingMembers)
+    private void setMemberColor(List<FriendsChatMember> members, int color)
     {
         Widget list = client.getWidget(ComponentID.FRIENDS_CHAT_LIST);
-        if (list == null || list.getDynamicChildren() == null)
+
+        // Visibility check to save resources
+        if (list == null || list.getDynamicChildren() == null || list.isHidden())
         {
             return;
         }
 
-        Set<String> missingNames = missingMembers.stream()
+        Set<String> targetNames = members.stream()
                 .map(m -> Text.standardize(m.getName()))
                 .collect(Collectors.toSet());
-
-        int colorInt = config.getHighlightColor().getRGB() & 0xFFFFFF;
 
         for (Widget child : list.getDynamicChildren())
         {
             String rawText = child.getText();
             String name = Text.standardize(Text.removeTags(rawText));
 
-            if (missingNames.contains(name))
+            if (targetNames.contains(name))
             {
-                child.setTextColor(colorInt);
+                child.setTextColor(color);
             }
         }
     }
@@ -316,7 +414,7 @@ public class PresenceChecker extends Plugin
 
     private void updatePanel(List<FriendsChatMember> missingMembers)
     {
-        SwingUtilities.invokeLater(() -> panel.updateList(missingMembers));
+        SwingUtilities.invokeLater(() -> panel.updateMissingList(missingMembers));
     }
 
     private void sendChatMessage(String message)
