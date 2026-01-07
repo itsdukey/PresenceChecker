@@ -1,64 +1,61 @@
-# Presence Checker Plugin
+# Presence Checker
 
-**Presence Checker** is a RuneLite plugin for Old School RuneScape designed to help clan leaders, event organizers, and officers instantly identify which clan members are absent from a gathering.
+**Presence Checker** is a RuneLite plugin designed for Old School RuneScape Clan Chat leaders, event organizers, and PK teams. It allows you to instantly "take attendance" by identifying which Clan Chat members are currently logged in but are **not** within your immediate vicinity (render distance).
 
-It automatically cross-references your current **Friends Chat (Clan Chat)** member list against the players physically present in your **local vicinity** to determine who is missing.
+it includes a **Suspicious Activity Tracker** to monitor for potential "scouts" or players hopping in and out of your channel rapidly.
 
 ![Plugin Icon](src/main/resources/iconfull.png)
 
-##  Key Features
+## Features
 
-###  Presence Detection
-* **Vicinity Scan:** Instantly scans all loaded players in your area and compares them to your Friends Chat list.
-* **Real-Time Updates:** Identifies members who are in the chat channel but **not** standing near you.
+### 🔍 Missing Members (Attendance)
+* **Instant Comparison:** Compares your current Clan Chat list against the players physically visible on your screen.
+* **Visual Indicators:**
+    * **Side Panel:** Lists all missing members with their rank (e.g., `[Gen] PlayerName`).
+    * **In-Game Overlay:** Displays a HUD with the count of missing members and a list of names (if the count is low).
+    * **Widget Highlighting:** Changes the text color of missing members directly in the native Clan Chat list (default: Purple) for a set duration.
+* **Clipboard Export:** "Copy All" button to easily paste the missing list into Discord or spreadsheets.
 
-###  Side Panel Interface
-* **Visual List:** Displays missing members in a clean, dark-themed scrollable list matching the RuneLite aesthetic.
-* **Rank Icons:** Shows clan ranks (e.g., `[Gen]`, `[Sgt]`) next to names for quick hierarchy checks.
-* **Clipboard Export:** A dedicated **"Copy All"** button lets you instantly grab the full list of absentees to paste into Discord, spreadsheets, or logs.
-* **Quick Refresh:** Re-run the check instantly with the **Refresh** button.
+### ⚠️ Suspicious Activity Tracker (New!)
+* **Anti-Scout Monitoring:** Automatically detects players who join the Clan Chat and leave shortly after.
+* **Configurable Threshold:** Define what counts as "suspicious" by setting a time limit (1–10 seconds).
+* **Dedicated UI:** Appears at the top of the side panel for immediate visibility.
+* **History:** Keeps a running list of suspicious names until you manually clear them.
 
-###  In-Game Overlay (HUD)
-* **Heads-Up Display:** A movable overlay on your screen shows the current count of missing members.
-* **Detailed View:** Optionally lists the specific names of missing members directly on the overlay if the count is low (configurable).
+## Usage
 
-###  Chat Integration
-* **Commands:** Run checks via chat using the command `::absent`.
-* **Chat Output:** (Optional) Prints the list of missing members directly to your game chat box for quick reference.
+### The Side Panel
+The plugin panel is divided into two sections:
+1.  **Suspicious Activity (Top):** Shows names of players who joined and left rapidly.
+    * *Copy Names:* Copies the list to your clipboard.
+    * *Clear Names:* Resets the list.
+2.  **Missing Members (Bottom):** Shows members logged in but not nearby.
+    * *Refresh:* Manually triggers a new scan.
+    * *Copy All:* Copies the list to your clipboard.
+    * *Clear Names:* Clears the current visual list.
 
-###  Visual Highlighting
-* **List Highlighting:** Automatically highlights the names of missing members in **Purple** (or any custom color) directly inside the in-game Friends Chat list widget.
+### Chat Commands
+* `::absent` - Manually triggers a presence check. If enabled in config, this will also output the missing members list to your local chat box.
 
----
+## Configuration
 
-## ⚙️ Configuration
-
-The plugin is highly customizable via the RuneLite configuration panel.
+The plugin is highly configurable via the RuneLite settings menu:
 
 ### General Settings
-* **Message Color:** Customize the color of chat messages sent by the plugin.
-* **Show Chat Messages:** Toggle whether results are printed to the game chat (Default: `OFF`).
-* **Highlight Color:** Choose the color used to highlight missing members in the in-game clan list (Default: `Purple`).
+* **Message Color:** Color of the chat message output.
+* **Show Chat Messages:** Toggle whether missing members are printed to the game chat box.
+* **Highlight Color:** The color used to highlight missing members in the native Clan Chat interface.
+* **Highlight Duration:** How long (in seconds) the native interface highlight lasts.
 
-### Chat Filters
-* **Exclude Self:** Toggle whether to include yourself in the missing list (Default: `ON`).
-* **Rank Filtering:** Individual toggles to **hide** specific ranks from the report. useful if you want to ignore missing Guests, Recruits, or specific officer ranks.
-    * *Options:* Hide Owner, General, Captain, Lieutenant, Sergeant, Corporal, Recruit, Friend, Guest.
+### Chat Filter
+* **Exclude Self:** Don't list your own player as missing.
+* **Rank Filters:** Toggles to hide specific ranks (Owner, General, Captain, Lieutenant, Sergeant, Corporal, Recruit, Friend, Guest).
 
 ### Overlay Settings
-* **Enable Overlay:** Toggle the on-screen HUD (Default: `ON`).
-* **Show Names in Overlay:** List names of missing members on the screen instead of just the count.
-* **Overlay Names Limit:** Set the maximum number of names to show before reverting to a simple count (Default: `5`).
+* **Enable Overlay:** Toggle the on-screen HUD.
+* **Show Names in Overlay:** Show specific names if the missing count is low.
+* **Overlay Names Limit:** Maximum number of names to show on the overlay before switching to a simple count.
 
----
-
-##  How to Use
-
-1.  **Install** the plugin from the RuneLite Plugin Hub (once submitted) or build it locally.
-2.  Open the **Presence Checker** side panel (PC Icon).
-3.  Click the **Refresh** button in the panel or type `::absent` in-game.
-4.  View the list of missing members in the panel, on the overlay, or look for **highlighted names** in your Clan Chat tab.
-
-
-
-
+### Suspicious Activity
+* **Enable Tracking:** Toggle the join/leave monitoring feature on or off.
+* **Suspicious Time (Sec):** The time window (1-10 seconds) for a user to join and leave to be flagged as suspicious.
