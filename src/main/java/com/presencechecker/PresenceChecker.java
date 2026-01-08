@@ -88,7 +88,10 @@ public class PresenceChecker extends Plugin
 
     // Suspicious Activity Tracking
     private final Map<String, Long> joinTimes = new HashMap<>();
-    private final List<String> suspiciousUsers = new ArrayList<>();
+    private final List<String> suspiciousDisplayList = new ArrayList<>();
+
+    // Map to track how many times a user has been flagged suspicious
+    private final Map<String, Integer> suspiciousCounts = new HashMap<>();
 
     @Provides
     @SuppressWarnings("unused") // Used by Guice
@@ -148,7 +151,8 @@ public class PresenceChecker extends Plugin
         overlayManager.remove(overlay);
         clientToolbar.removeNavigation(navButton);
         joinTimes.clear();
-        suspiciousUsers.clear();
+        suspiciousDisplayList.clear();
+        suspiciousCounts.clear();
     }
 
     // --- EVENT LISTENERS FOR SUSPICIOUS ACTIVITY ---
@@ -161,7 +165,6 @@ public class PresenceChecker extends Plugin
             return;
         }
 
-        // Don't track if the rank is ignored immediately
         if (shouldIgnoreSuspiciousRank(event.getMember().getRank()))
         {
             return;
@@ -179,7 +182,6 @@ public class PresenceChecker extends Plugin
             return;
         }
 
-        // Double check rank in case they ranked up/down (though unlikely in seconds)
         if (shouldIgnoreSuspiciousRank(event.getMember().getRank()))
         {
             return;
@@ -195,25 +197,37 @@ public class PresenceChecker extends Plugin
 
             if (durationMs <= thresholdMs)
             {
-                addSuspiciousUser(event.getMember().getName()); // Use original name for display
+                addSuspiciousUser(event.getMember().getName(), durationMs);
             }
         }
     }
 
-    private void addSuspiciousUser(String rawName)
+    private void addSuspiciousUser(String rawName, long durationMs)
     {
-        // Avoid duplicates in the list
-        if (!suspiciousUsers.contains(rawName))
+        // 1. Update Panel List
+        String displayText = rawName + " (" + durationMs + "ms)";
+        suspiciousDisplayList.add(displayText);
+        SwingUtilities.invokeLater(() -> panel.updateSuspiciousList(suspiciousDisplayList));
+
+        // 2. Update Frequency Count & Check Warning
+        String standardName = Text.standardize(rawName);
+        int count = suspiciousCounts.getOrDefault(standardName, 0) + 1;
+        suspiciousCounts.put(standardName, count);
+
+        // Check if we hit the configured threshold
+        int threshold = config.suspiciousWarningThreshold();
+        if (threshold > 0 && count == threshold)
         {
-            suspiciousUsers.add(rawName);
-            SwingUtilities.invokeLater(() -> panel.updateSuspiciousList(suspiciousUsers));
+            String msg = "WARNING: " + rawName + " Has been flagged Suspicious";
+            sendChatMessage(ColorUtil.wrapWithColorTag(msg, config.suspiciousWarningColor()));
         }
     }
 
     private void clearSuspiciousActivity()
     {
-        suspiciousUsers.clear();
-        SwingUtilities.invokeLater(() -> panel.updateSuspiciousList(suspiciousUsers));
+        suspiciousDisplayList.clear();
+        suspiciousCounts.clear(); // Reset counts when list is cleared
+        SwingUtilities.invokeLater(() -> panel.updateSuspiciousList(suspiciousDisplayList));
     }
 
     private boolean shouldIgnoreSuspiciousRank(FriendsChatRank rank)

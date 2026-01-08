@@ -65,8 +65,6 @@ public class PresenceCheckerPanel extends PluginPanel
 
         setLayout(new BorderLayout());
         setBackground(ColorScheme.DARK_GRAY_COLOR);
-        // Remove default border to allow scrollbar to touch edges if desired,
-        // or keep small border.
         setBorder(new EmptyBorder(10, 10, 10, 10));
 
         // Use GridBagLayout for the main content to strictly control vertical stacking

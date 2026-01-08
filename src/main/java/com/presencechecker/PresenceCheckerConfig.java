@@ -241,8 +241,6 @@ public interface PresenceCheckerConfig extends Config
     )
     default int suspiciousThreshold() { return 4; }
 
-    // --- SUSPICIOUS RANK FILTERS ---
-
     @ConfigItem(
             keyName = "susHideOwner",
             name = "Hide Owners",
@@ -323,4 +321,24 @@ public interface PresenceCheckerConfig extends Config
             section = suspiciousSettings
     )
     default boolean susHideGuest() { return false; }
+
+    // --- SUSPICIOUS WARNING SETTINGS ---
+
+    @ConfigItem(
+            keyName = "suspiciousWarningThreshold",
+            name = "Warning Threshold",
+            description = "Number of times a user must be flagged before sending a chat warning (0 to disable).",
+            position = 11,
+            section = suspiciousSettings
+    )
+    default int suspiciousWarningThreshold() { return 3; }
+
+    @ConfigItem(
+            keyName = "suspiciousWarningColor",
+            name = "Warning Message Color",
+            description = "Color of the chat warning when a user hits the suspicious threshold.",
+            position = 12,
+            section = suspiciousSettings
+    )
+    default Color suspiciousWarningColor() { return Color.RED; }
 }
