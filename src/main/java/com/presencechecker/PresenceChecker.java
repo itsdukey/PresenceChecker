@@ -45,8 +45,8 @@ import net.runelite.client.util.Text;
 
 @PluginDescriptor(
         name = "Presence Checker",
-        description = "Checks which Clan Chat members are currently in the vicinity",
-        tags = {"presence", "clan", "check"}
+        description = "Checks which Friends Chat members are currently in the vicinity",
+        tags = {"presence", "clan", "check","pvp","scout","fc","friends chat",}
 )
 public class PresenceChecker extends Plugin
 {
