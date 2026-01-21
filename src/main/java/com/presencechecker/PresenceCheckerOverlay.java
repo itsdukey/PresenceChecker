@@ -4,7 +4,7 @@ import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.util.List;
 import javax.inject.Inject;
-import net.runelite.api.Client; // Added Import
+import net.runelite.api.Client;
 import net.runelite.api.FriendsChatMember;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -13,7 +13,7 @@ import net.runelite.client.ui.overlay.components.PanelComponent;
 
 public class PresenceCheckerOverlay extends Overlay
 {
-    private final Client client; // Added Client field
+    private final Client client;
     private final PresenceChecker plugin;
     private final PresenceCheckerConfig config;
     private final PanelComponent panelComponent = new PanelComponent();
@@ -21,7 +21,7 @@ public class PresenceCheckerOverlay extends Overlay
     @Inject
     private PresenceCheckerOverlay(Client client, PresenceChecker plugin, PresenceCheckerConfig config)
     {
-        this.client = client; // Initialize Client
+        this.client = client;
         this.plugin = plugin;
         this.config = config;
         setPosition(OverlayPosition.TOP_LEFT);
@@ -50,7 +50,7 @@ public class PresenceCheckerOverlay extends Overlay
         panelComponent.getChildren().add(LineComponent.builder()
                 .left("Missing Members:")
                 .right(Integer.toString(missingCount))
-                .rightColor(missingCount > 0 ? config.getMessageColor() : java.awt.Color.WHITE)
+                .rightColor(missingCount > 0 ? java.awt.Color.RED : java.awt.Color.WHITE) // Hardcoded to RED
                 .build());
 
         // Render detailed names if enabled and under limit

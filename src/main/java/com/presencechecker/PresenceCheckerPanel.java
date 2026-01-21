@@ -28,9 +28,11 @@ import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.LineBorder;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 import net.runelite.api.FriendsChatMember;
 import net.runelite.api.FriendsChatRank;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
@@ -39,6 +41,12 @@ public class PresenceCheckerPanel extends PluginPanel
 {
     // --- Main Layout Container ---
     private final JPanel contentPanel = new JPanel();
+    private final ConfigManager configManager;
+    private final PresenceCheckerConfig config;
+
+    // --- Tutorial Container ---
+    // This panel persists and swaps between "Expanded" and "Collapsed" views
+    private final JPanel tutorialContainer = new JPanel(new BorderLayout());
 
     // --- Missing Members Components ---
     private final JPanel missingListContainer = new JPanel();
@@ -58,10 +66,12 @@ public class PresenceCheckerPanel extends PluginPanel
     private Runnable clearSuspiciousAction;
 
     @Inject
-    public PresenceCheckerPanel()
+    public PresenceCheckerPanel(ConfigManager configManager, PresenceCheckerConfig config)
     {
         // Disable default PluginPanel scrollbar so we can use our custom one
         super(false);
+        this.configManager = configManager;
+        this.config = config;
 
         setLayout(new BorderLayout());
         setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -78,18 +88,31 @@ public class PresenceCheckerPanel extends PluginPanel
         c.insets = new Insets(0, 0, 0, 0);
 
         // =================================================================
-        // SECTION 1: SUSPICIOUS ACTIVITY (Now at Top)
+        // SECTION 0: TUTORIAL (Always Added, Content Varies)
+        // =================================================================
+        c.gridy = 0;
+        c.insets = new Insets(0, 0, 15, 0);
+
+        tutorialContainer.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        contentPanel.add(tutorialContainer, c);
+
+        // Load the initial state (Expanded or Collapsed)
+        rebuildTutorialPanel();
+
+        // =================================================================
+        // SECTION 1: SUSPICIOUS ACTIVITY
         // =================================================================
 
         // 1. Header
-        c.gridy = 0;
+        c.gridy = 1;
+        c.insets = new Insets(0, 0, 0, 0);
         contentPanel.add(createSuspiciousHeader(), c);
 
         // 2. List Container
         suspiciousListContainer.setLayout(new GridBagLayout());
         suspiciousListContainer.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        c.gridy = 1;
+        c.gridy = 2;
         // Add some bottom padding between this list and the divider
         c.insets = new Insets(0, 0, 15, 0);
         contentPanel.add(suspiciousListContainer, c);
@@ -104,16 +127,16 @@ public class PresenceCheckerPanel extends PluginPanel
         line.setPreferredSize(new Dimension(0, 1));
         divider.add(line, BorderLayout.CENTER);
 
-        c.gridy = 2;
+        c.gridy = 3;
         c.insets = new Insets(0, 0, 15, 0); // Padding below line
         contentPanel.add(divider, c);
 
         // =================================================================
-        // SECTION 3: MISSING MEMBERS (Now at Bottom)
+        // SECTION 3: MISSING MEMBERS
         // =================================================================
 
         // 1. Header
-        c.gridy = 3;
+        c.gridy = 4;
         c.insets = new Insets(0, 0, 0, 0);
         contentPanel.add(createMissingHeader(), c);
 
@@ -121,18 +144,16 @@ public class PresenceCheckerPanel extends PluginPanel
         missingListContainer.setLayout(new GridBagLayout());
         missingListContainer.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        c.gridy = 4;
+        c.gridy = 5;
         contentPanel.add(missingListContainer, c);
 
         // =================================================================
-        // SECTION 4: INVISIBLE FILLER (Fixes the "Huge Space" issue)
+        // SECTION 4: INVISIBLE FILLER
         // =================================================================
-        // This component consumes all remaining vertical space, forcing
-        // the components above to pack tightly to the top.
         JPanel filler = new JPanel();
         filler.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        c.gridy = 5;
+        c.gridy = 6;
         c.weighty = 1; // IMPORTANT: Consumes extra vertical space
         c.fill = GridBagConstraints.BOTH;
         contentPanel.add(filler, c);
@@ -153,6 +174,171 @@ public class PresenceCheckerPanel extends PluginPanel
         addDefaultMessage(missingListContainer, "Run ::absent or Refresh.");
 
         updateButtonsState();
+    }
+
+    /**
+     * Rebuilds the tutorial panel based on the current config state.
+     * If true: Shows full guide (Expanded).
+     * If false: Shows header only (Collapsed).
+     */
+    private void rebuildTutorialPanel()
+    {
+        tutorialContainer.removeAll();
+        boolean isExpanded = config.showPanelTutorial();
+
+        if (isExpanded)
+        {
+            tutorialContainer.add(createExpandedTutorial());
+        }
+        else
+        {
+            tutorialContainer.add(createCollapsedTutorial());
+        }
+
+        tutorialContainer.revalidate();
+        tutorialContainer.repaint();
+    }
+
+    private JPanel createExpandedTutorial()
+    {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        panel.setBorder(new LineBorder(ColorScheme.MEDIUM_GRAY_COLOR));
+
+        // --- Header (Title + Minimize Button) ---
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        header.setBorder(new EmptyBorder(5, 8, 5, 5));
+
+        JLabel title = new JLabel("Plugin Guide");
+        title.setFont(FontManager.getRunescapeBoldFont());
+        title.setForeground(Color.WHITE);
+
+        JButton minimizeBtn = createIconButton("-", "Minimize guide");
+        minimizeBtn.addActionListener(e -> {
+            configManager.setConfiguration("presencechecker", "showPanelTutorial", false);
+            rebuildTutorialPanel();
+        });
+
+        header.add(title, BorderLayout.CENTER);
+        header.add(minimizeBtn, BorderLayout.EAST);
+
+        // --- Body Content ---
+        JPanel body = new JPanel(new GridBagLayout());
+        body.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        body.setBorder(new EmptyBorder(0, 8, 8, 8));
+
+        GridBagConstraints c = new GridBagConstraints();
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1;
+        c.gridx = 0;
+        c.gridy = 0;
+        c.insets = new Insets(0, 0, 8, 0);
+
+        // Intro
+        body.add(createHelpTextHTML(
+                "<b>Welcome!</b><br>" +
+                        "This tool helps you track Friends Chat attendance and detect potential spies."
+        ), c);
+
+        c.gridy++;
+        // Section 1: Presence
+        body.add(createHelpTextHTML(
+                "<br><b>1. Missing Members (Presence)</b><br>" +
+                        "Identifies Friends Chat Members who are logged in but <u>not nearby</u>.<br><br>" +
+                        "• <b>How:</b> Click 'Refresh' below or type <code>::absent</code> in gamechat.<br>" +
+                        "<div style='margin-top: 4px'>• <b>Use Case:</b> Verifying everyone has arrived at a raid lobby, drop party, or boss mass.</div>"
+        ), c);
+
+        c.gridy++;
+        // Section 2: Anti-Scout
+        body.add(createHelpTextHTML(
+                "<br><b>2. Suspicious Activity (Anti-Scout)</b><br>" +
+                        "Automatically detects players who join and leave the chat very quickly.<br><br>" +
+                        "• <b>How:</b> It runs passively. Names appear in the list above.<br>" +
+                        "<div style='margin-top: 4px'>• <b>Use Case:</b> Spotting enemy scouts hopping in and out of friends chats to find mass worlds and disrupt events.</div>"
+        ), c);
+
+        c.gridy++;
+        // Section 3: Configuration
+        body.add(createHelpTextHTML(
+                "<br><b>3. Configuration</b><br>" +
+                        "Open the Plugin Settings, search 'presence checker', and click the gear icon to 'edit plugin configuration' to adjust:<br>" +
+                        "<div style='margin-top: 6px'>• Adjust the Suspicion Timer (in milliseconds).</div>" +
+                        "• Hide specific ranks you don't want showing up in the detection lists (e.g. Generals).<br>" +
+                        "• Change highlight colors."
+
+        ), c);
+
+        panel.add(header, BorderLayout.NORTH);
+        panel.add(body, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    private JPanel createCollapsedTutorial()
+    {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        panel.setBorder(new LineBorder(ColorScheme.MEDIUM_GRAY_COLOR));
+
+        // --- Header Only (Title + Expand Button) ---
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        header.setBorder(new EmptyBorder(5, 8, 5, 5));
+
+        JLabel title = new JLabel("Plugin Guide");
+        title.setFont(FontManager.getRunescapeBoldFont());
+        title.setForeground(Color.GRAY); // Dimmed color when collapsed
+
+        JButton expandBtn = createIconButton("+", "Expand guide");
+        expandBtn.addActionListener(e -> {
+            configManager.setConfiguration("presencechecker", "showPanelTutorial", true);
+            rebuildTutorialPanel();
+        });
+
+        header.add(title, BorderLayout.CENTER);
+        header.add(expandBtn, BorderLayout.EAST);
+
+        panel.add(header, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JButton createIconButton(String text, String tooltip)
+    {
+        JButton btn = new JButton(text);
+        btn.setPreferredSize(new Dimension(20, 20));
+        btn.setFont(FontManager.getRunescapeSmallFont());
+        btn.setForeground(Color.LIGHT_GRAY);
+        btn.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        btn.setBorder(null);
+        btn.setFocusPainted(false);
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btn.setToolTipText(tooltip);
+
+        btn.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseEntered(MouseEvent e)
+            {
+                btn.setForeground(Color.WHITE);
+            }
+            @Override
+            public void mouseExited(MouseEvent e)
+            {
+                btn.setForeground(Color.LIGHT_GRAY);
+            }
+        });
+        return btn;
+    }
+
+    private JLabel createHelpTextHTML(String htmlBody)
+    {
+        // Width at 150px to prevent cutoff
+        JLabel label = new JLabel("<html><body style='width: 150px'>" + htmlBody + "</body></html>");
+        label.setFont(FontManager.getRunescapeSmallFont());
+        label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        return label;
     }
 
     private JPanel createSuspiciousHeader()

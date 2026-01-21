@@ -5,6 +5,7 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
+import net.runelite.client.config.Notification;
 import net.runelite.client.config.Range;
 
 @ConfigGroup("presencechecker")
@@ -14,63 +15,53 @@ public interface PresenceCheckerConfig extends Config
 
     @ConfigSection(
             name = "General Settings",
-            description = "General configuration for messages and colors.",
-            position = 0
+            description = "General configuration for highlighting.",
+            position = 0,
+            closedByDefault = true
     )
     String generalSettings = "generalSettings";
 
     @ConfigSection(
             name = "Chat Filter",
             description = "Options to filter which members are shown in the missing list.",
-            position = 1
+            position = 1,
+            closedByDefault = true
     )
     String chatFilter = "chatFilter";
 
     @ConfigSection(
             name = "Overlay Settings",
             description = "Configuration for the screen overlay HUD.",
-            position = 2
+            position = 2,
+            closedByDefault = true
     )
     String overlaySettings = "overlaySettings";
 
     @ConfigSection(
             name = "Suspicious Activity",
             description = "Tracker for players quickly joining and leaving.",
-            position = 3
+            position = 3,
+            closedByDefault = true
     )
     String suspiciousSettings = "suspiciousSettings";
 
+    // --- HIDDEN CONFIGS ---
+
+    @ConfigItem(
+            keyName = "showPanelTutorial",
+            name = "Show Tutorial",
+            description = "Whether to show the help tutorial in the panel.",
+            hidden = true
+    )
+    default boolean showPanelTutorial() { return true; }
+
     // --- GENERAL SETTINGS ---
-
-    @ConfigItem(
-            keyName = "messageColor",
-            name = "Message Color",
-            description = "The color of the chat message when checking for members.",
-            position = 1,
-            section = generalSettings
-    )
-    default Color getMessageColor()
-    {
-        return Color.RED;
-    }
-
-    @ConfigItem(
-            keyName = "showChatMessages",
-            name = "Show Chat Messages",
-            description = "If disabled, the missing members list will only appear in the side panel, not in the chat.",
-            position = 2,
-            section = generalSettings
-    )
-    default boolean showChatMessages()
-    {
-        return false;
-    }
 
     @ConfigItem(
             keyName = "highlightColor",
             name = "Highlight Color",
             description = "The color to highlight missing members in the clan chat list.",
-            position = 3,
+            position = 1,
             section = generalSettings
     )
     default Color getHighlightColor()
@@ -82,12 +73,12 @@ public interface PresenceCheckerConfig extends Config
             keyName = "highlightDuration",
             name = "Highlight Duration",
             description = "How many seconds to keep names highlighted before letting them revert (0 to disable).",
-            position = 4,
+            position = 2,
             section = generalSettings
     )
     default int highlightDuration()
     {
-        return 5;
+        return 10; // Default 10 seconds
     }
 
     // --- CHAT FILTER SECTION ---
@@ -229,17 +220,17 @@ public interface PresenceCheckerConfig extends Config
     default boolean enableSuspiciousTracking() { return true; }
 
     @Range(
-            min = 1,
-            max = 10
+            min = 100,
+            max = 10000
     )
     @ConfigItem(
             keyName = "suspiciousThreshold",
-            name = "Suspicious Time (Sec)",
-            description = "If a user joins and leaves within this many seconds, they are flagged.",
+            name = "Suspicious Time (ms)",
+            description = "If a user joins and leaves within this many milliseconds, they are flagged.",
             position = 1,
             section = suspiciousSettings
     )
-    default int suspiciousThreshold() { return 4; }
+    default int suspiciousThreshold() { return 4000; }
 
     @ConfigItem(
             keyName = "susHideOwner",
@@ -322,8 +313,6 @@ public interface PresenceCheckerConfig extends Config
     )
     default boolean susHideGuest() { return false; }
 
-    // --- SUSPICIOUS WARNING SETTINGS ---
-
     @ConfigItem(
             keyName = "suspiciousWarningThreshold",
             name = "Warning Threshold",
@@ -341,4 +330,29 @@ public interface PresenceCheckerConfig extends Config
             section = suspiciousSettings
     )
     default Color suspiciousWarningColor() { return Color.RED; }
+
+    // --- NOTIFICATION OPTION ---
+    @ConfigItem(
+            keyName = "suspiciousNotification",
+            name = "Suspicious Alert",
+            description = "Customize the notification (Tray, Sound, Flash) for suspicious activity.",
+            position = 13,
+            section = suspiciousSettings
+    )
+    default Notification suspiciousNotification()
+    {
+        return Notification.OFF; // UPDATED: Default is OFF
+    }
+
+    @ConfigItem(
+            keyName = "friendlyWhitelist",
+            name = "Friendly Whitelist",
+            description = "Enter names to NEVER flag as suspicious (comma or newline separated).",
+            position = 14,
+            section = suspiciousSettings
+    )
+    default String friendlyWhitelist()
+    {
+        return "";
+    }
 }

@@ -28,6 +28,7 @@ import net.runelite.api.events.FriendsChatMemberJoined;
 import net.runelite.api.events.FriendsChatMemberLeft;
 import net.runelite.api.widgets.ComponentID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.Notifier; // Added Import
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatMessageManager;
 import net.runelite.client.chat.QueuedMessage;
@@ -75,6 +76,9 @@ public class PresenceChecker extends Plugin
 
     @Inject
     private ScheduledExecutorService executor;
+
+    @Inject
+    private Notifier notifier; // Injected Notifier
 
     private NavigationButton navButton;
 
@@ -165,7 +169,7 @@ public class PresenceChecker extends Plugin
             return;
         }
 
-        if (shouldIgnoreSuspiciousRank(event.getMember().getRank()))
+        if (shouldIgnoreSuspicious(event.getMember()))
         {
             return;
         }
@@ -182,7 +186,7 @@ public class PresenceChecker extends Plugin
             return;
         }
 
-        if (shouldIgnoreSuspiciousRank(event.getMember().getRank()))
+        if (shouldIgnoreSuspicious(event.getMember()))
         {
             return;
         }
@@ -193,7 +197,7 @@ public class PresenceChecker extends Plugin
         if (joinTime != null)
         {
             long durationMs = System.currentTimeMillis() - joinTime;
-            long thresholdMs = config.suspiciousThreshold() * 1000L;
+            long thresholdMs = config.suspiciousThreshold();
 
             if (durationMs <= thresholdMs)
             {
@@ -216,10 +220,13 @@ public class PresenceChecker extends Plugin
 
         // Check if we hit the configured threshold
         int threshold = config.suspiciousWarningThreshold();
-        if (threshold > 0 && count == threshold)
+        if (threshold > 0 && count >= threshold)
         {
             String msg = "WARNING: " + rawName + " Has been flagged Suspicious";
             sendChatMessage(ColorUtil.wrapWithColorTag(msg, config.suspiciousWarningColor()));
+
+            // NEW: Send Windows Notification / Tray Alert
+            notifier.notify(config.suspiciousNotification(), "Suspicious Activity Detected: " + rawName);
         }
     }
 
@@ -230,8 +237,22 @@ public class PresenceChecker extends Plugin
         SwingUtilities.invokeLater(() -> panel.updateSuspiciousList(suspiciousDisplayList));
     }
 
-    private boolean shouldIgnoreSuspiciousRank(FriendsChatRank rank)
+    // Consolidated method to check Rank AND Whitelist
+    private boolean shouldIgnoreSuspicious(FriendsChatMember member)
     {
+        // 1. Check Whitelist
+        String name = Text.standardize(member.getName());
+        Set<String> whitelist = Text.fromCSV(config.friendlyWhitelist()).stream()
+                .map(Text::standardize)
+                .collect(Collectors.toSet());
+
+        if (whitelist.contains(name))
+        {
+            return true;
+        }
+
+        // 2. Check Rank
+        FriendsChatRank rank = member.getRank();
         switch (rank)
         {
             case OWNER: return config.susHideOwner();
@@ -300,11 +321,6 @@ public class PresenceChecker extends Plugin
             FriendsChatManager friendsChatManager = client.getFriendsChatManager();
             if (friendsChatManager == null)
             {
-                String msg = "You are not currently in a Clan Chat.";
-                if (config.showChatMessages())
-                {
-                    sendChatMessage(ColorUtil.wrapWithColorTag(msg, config.getMessageColor()));
-                }
                 lastMissingMembers = Collections.emptyList();
                 updatePanel(new ArrayList<>());
                 return;
@@ -320,34 +336,13 @@ public class PresenceChecker extends Plugin
             highlightStartTime = System.currentTimeMillis();
             isHighlighting = true;
 
-            // 4. Prepare Chat Output
-            List<String> missingMembersChat = new ArrayList<>();
-            Color msgColor = config.getMessageColor();
-            for (FriendsChatMember member : missingMembersList)
+            // 4. Report results (Panel only)
+            if (missingMembersList.isEmpty())
             {
-                String rankStr = getRankString(member.getRank());
-                String nameStr = ColorUtil.wrapWithColorTag(member.getName(), msgColor);
-                missingMembersChat.add(rankStr + nameStr);
-            }
-
-            // 5. Report results (Chat & Panel)
-            if (missingMembersChat.isEmpty())
-            {
-                if (config.showChatMessages())
-                {
-                    String msg = "All visible Clan Chat members are currently around you.";
-                    sendChatMessage(ColorUtil.wrapWithColorTag(msg, msgColor));
-                }
                 updatePanel(new ArrayList<>()); // Clear panel
             }
             else
             {
-                if (config.showChatMessages())
-                {
-                    String header = ColorUtil.wrapWithColorTag("Members not in vicinity (" + missingMembersChat.size() + "): ", msgColor);
-                    sendChatMessage(header + String.join(", ", missingMembersChat));
-                }
-
                 updatePanel(missingMembersList);
 
                 // Apply color immediately (ClientTick will pick it up from here)
@@ -469,21 +464,5 @@ public class PresenceChecker extends Plugin
                         .type(ChatMessageType.CONSOLE)
                         .runeLiteFormattedMessage(message)
                         .build());
-    }
-
-    private String getRankString(FriendsChatRank rank)
-    {
-        switch (rank)
-        {
-            case OWNER: return "<col=ffff00>[Owner]</col> ";
-            case GENERAL: return "<col=ffca00>[Gen]</col> ";
-            case CAPTAIN: return "<col=ff9b00>[Capt]</col> ";
-            case LIEUTENANT: return "<col=ff6f00>[Lt]</col> ";
-            case SERGEANT: return "<col=ff4000>[Sgt]</col> ";
-            case CORPORAL: return "<col=ff1500>[Corp]</col> ";
-            case RECRUIT: return "<col=880000>[Rec]</col> ";
-            case FRIEND: return "<col=004400>[Friend]</col> ";
-            default: return "";
-        }
     }
 }
