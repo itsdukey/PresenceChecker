@@ -341,9 +341,10 @@ public interface PresenceCheckerConfig extends Config
     )
     default Notification suspiciousNotification()
     {
-        return Notification.OFF; // UPDATED: Default is OFF
+        return Notification.OFF;
     }
 
+    // --- WHITELIST ---
     @ConfigItem(
             keyName = "friendlyWhitelist",
             name = "Friendly Whitelist",
@@ -352,6 +353,19 @@ public interface PresenceCheckerConfig extends Config
             section = suspiciousSettings
     )
     default String friendlyWhitelist()
+    {
+        return "";
+    }
+
+    // --- BLACKLIST ---
+    @ConfigItem(
+            keyName = "blacklistedNames",
+            name = "Enemy Blacklist",
+            description = "Enter names to INSTANTLY alert on join (comma or newline separated).",
+            position = 15,
+            section = suspiciousSettings
+    )
+    default String blacklistedNames()
     {
         return "";
     }

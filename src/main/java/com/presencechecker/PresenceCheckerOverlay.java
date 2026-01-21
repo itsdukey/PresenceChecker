@@ -30,18 +30,8 @@ public class PresenceCheckerOverlay extends Overlay
     @Override
     public Dimension render(Graphics2D graphics)
     {
-        // 1. Check Config
-        if (!config.enableOverlay())
-        {
-            return null;
-        }
-
-        // 2. Check if we are actually in a Friends Chat
-        // If this is null, we are not in a chat, so we hide the overlay completely.
-        if (client.getFriendsChatManager() == null)
-        {
-            return null;
-        }
+        if (!config.enableOverlay()) return null;
+        if (client.getFriendsChatManager() == null) return null;
 
         List<FriendsChatMember> missingMembers = plugin.getMissingMembers();
         int missingCount = missingMembers.size();
@@ -50,10 +40,9 @@ public class PresenceCheckerOverlay extends Overlay
         panelComponent.getChildren().add(LineComponent.builder()
                 .left("Missing Members:")
                 .right(Integer.toString(missingCount))
-                .rightColor(missingCount > 0 ? java.awt.Color.RED : java.awt.Color.WHITE) // Hardcoded to RED
+                .rightColor(missingCount > 0 ? java.awt.Color.RED : java.awt.Color.WHITE)
                 .build());
 
-        // Render detailed names if enabled and under limit
         if (config.showOverlayNames() && missingCount > 0 && missingCount <= config.overlayNamesLimit())
         {
             for (FriendsChatMember member : missingMembers)
@@ -64,7 +53,6 @@ public class PresenceCheckerOverlay extends Overlay
                         .build());
             }
         }
-
         return panelComponent.render(graphics);
     }
 }
