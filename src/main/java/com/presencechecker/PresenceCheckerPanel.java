@@ -30,8 +30,6 @@ import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
 import javax.swing.plaf.basic.BasicScrollBarUI;
-import net.runelite.api.FriendsChatMember;
-import net.runelite.api.FriendsChatRank;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
@@ -154,9 +152,31 @@ public class PresenceCheckerPanel extends PluginPanel
         header.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         header.setBorder(new EmptyBorder(5, 8, 5, 5));
 
+        // Listener to minimize when header is clicked
+        MouseAdapter minimizeAdapter = new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                configManager.setConfiguration("presencechecker", "showPanelTutorial", false);
+                rebuildTutorialPanel();
+            }
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                header.setBackground(ColorScheme.DARKER_GRAY_HOVER_COLOR);
+                panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                header.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+                panel.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+            }
+        };
+
+        header.addMouseListener(minimizeAdapter);
+
         JLabel title = new JLabel("Plugin Guide");
         title.setFont(FontManager.getRunescapeBoldFont());
         title.setForeground(Color.WHITE);
+        title.addMouseListener(minimizeAdapter);
 
         JButton minimizeBtn = createIconButton("-", "Minimize guide");
         minimizeBtn.addActionListener(e -> {
@@ -178,16 +198,28 @@ public class PresenceCheckerPanel extends PluginPanel
         c.gridy = 0;
         c.insets = new Insets(0, 0, 8, 0);
 
-        body.add(createHelpTextHTML("<b>Welcome!</b><br>This tool helps you track Friends Chat attendance and detect potential spies."), c);
+        // --- INTRO ---
+        body.add(createHelpTextHTML("<b>Welcome!</b><br>This tool tracks attendance and detects potential spies in your channel."), c);
 
+        // --- SECTION 1: MODES ---
         c.gridy++;
-        body.add(createHelpTextHTML("<br><b>1. Missing Members (Presence)</b><br>Identifies Friends Chat Members who are logged in but <u>not nearby</u>.<br><br>• <b>How:</b> Click 'Refresh' below or type <code>::absent</code>.<br><div style='margin-top: 4px'>• <b>Use Case:</b> Verifying everyone has arrived at a raid lobby, drop party, or boss mass.</div>"), c);
+        body.add(createHelpTextHTML("<br><b>1. Chat Selection</b><br>Go to Config > General Settings > <b>Target Chat</b> to switch between:<br>• Friends Chat (Green)<br>• Clan Chat (Orange)<br>• Guest Clan Chat"), c);
 
+        // --- SECTION 2: PRESENCE ---
         c.gridy++;
-        body.add(createHelpTextHTML("<br><b>2. Suspicious Activity (Anti-Scout)</b><br>Automatically detects players who join and leave the chat very quickly.<br><br>• <b>How:</b> It runs passively. Names appear in the list above.<br><div style='margin-top: 4px'>• <b>Use Case:</b> Spotting enemy scouts hopping in and out of friends chats to find mass worlds and disrupt events.</div>"), c);
+        body.add(createHelpTextHTML("<br><b>2. Missing Members</b><br>Identifies members in chat but <u>not nearby</u>.<br><br><b>Controls:</b><br>• <b>Refresh:</b> Manually check.<br>• <b>::absent:</b> Chat command.<br>• <b>Auto-Update:</b> (Config) Toggle to refresh this panel live every 5s."), c);
 
+        // --- SECTION 3: CLAN FILTERS ---
         c.gridy++;
-        body.add(createHelpTextHTML("<br><b>3. Configuration</b><br>Open the Plugin Settings, search 'presence checker', and click the gear icon to 'edit plugin configuration' to adjust:<br><div style='margin-top: 6px'>• Adjust the suspicion timer (milliseconds).</div>• Hide specific ranks you don't want showing up in the detection lists (e.g. Generals).<br>• Change highlight colors."), c);
+        body.add(createHelpTextHTML("<br><b>3. Clan Chat Filters</b><br>To hide specific ranks in Clan mode:<br><div style='margin-top: 4px'>• Go to <b>Config > Clan Chat Filters</b>.</div>• Use the <b>24 Dropdown Slots</b> to select ranks to hide (e.g. Recruit, Goblin).<br>• <b>Tip:</b> Click a dropdown and type the first letter to jump to a rank."), c);
+
+        // --- SECTION 4: FC FILTERS ---
+        c.gridy++;
+        body.add(createHelpTextHTML("<br><b>4. Friends Chat Filters</b><br>To hide ranks in Friends Chat mode:<br><div style='margin-top: 4px'>• Go to <b>Config > Friends Chat Filters</b>.</div>• Use the toggle boxes (e.g. 'Hide Captains')."), c);
+
+        // --- SECTION 5: ANTI-SCOUT ---
+        c.gridy++;
+        body.add(createHelpTextHTML("<br><b>5. Anti-Scout</b><br>Detects players joining/leaving quickly.<br>• <b>Suspicious Time:</b> Max time (ms) allowed.<br>• <b>Blacklist:</b> Names to INSTANTLY alert on."), c);
 
         panel.add(header, BorderLayout.NORTH);
         panel.add(body, BorderLayout.CENTER);
@@ -204,9 +236,31 @@ public class PresenceCheckerPanel extends PluginPanel
         header.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         header.setBorder(new EmptyBorder(5, 8, 5, 5));
 
+        // Listener to expand when header is clicked
+        MouseAdapter expandAdapter = new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                configManager.setConfiguration("presencechecker", "showPanelTutorial", true);
+                rebuildTutorialPanel();
+            }
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                header.setBackground(ColorScheme.DARKER_GRAY_HOVER_COLOR);
+                panel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            }
+            @Override
+            public void mouseExited(MouseEvent e) {
+                header.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+                panel.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+            }
+        };
+
+        header.addMouseListener(expandAdapter);
+
         JLabel title = new JLabel("Plugin Guide");
         title.setFont(FontManager.getRunescapeBoldFont());
         title.setForeground(Color.GRAY);
+        title.addMouseListener(expandAdapter);
 
         JButton expandBtn = createIconButton("+", "Expand guide");
         expandBtn.addActionListener(e -> {
@@ -240,6 +294,7 @@ public class PresenceCheckerPanel extends PluginPanel
 
     private JLabel createHelpTextHTML(String htmlBody)
     {
+        // Reverted to 150px to fit perfectly in the side panel
         JLabel label = new JLabel("<html><body style='width: 150px'>" + htmlBody + "</body></html>");
         label.setFont(FontManager.getRunescapeSmallFont());
         label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
@@ -332,7 +387,7 @@ public class PresenceCheckerPanel extends PluginPanel
         revalidateContainer(missingListContainer);
     }
 
-    public void updateMissingList(List<FriendsChatMember> members)
+    public void updateMissingList(List<PresenceChecker.PresenceMember> members)
     {
         missingListContainer.removeAll();
         currentMissingText.clear();
@@ -346,11 +401,12 @@ public class PresenceCheckerPanel extends PluginPanel
         if (members.isEmpty()) addDefaultMessage(missingListContainer, "No missing members.");
         else
         {
-            for (FriendsChatMember member : members)
+            for (PresenceChecker.PresenceMember member : members)
             {
-                String rankPrefix = getRankPrefix(member.getRank());
+                String rankPrefix = member.getRankName();
                 String displayText = rankPrefix + member.getName();
                 currentMissingText.add(displayText);
+                // Highlight rank if not empty
                 missingListContainer.add(createRow(displayText, !rankPrefix.isEmpty()), c);
                 c.gridy++;
             }
@@ -429,23 +485,6 @@ public class PresenceCheckerPanel extends PluginPanel
             public void mouseExited(MouseEvent e) { row.setBackground(ColorScheme.DARKER_GRAY_COLOR); }
         });
         return row;
-    }
-
-    private String getRankPrefix(FriendsChatRank rank)
-    {
-        if (rank == null) return "";
-        switch (rank)
-        {
-            case OWNER: return "[Owner] ";
-            case GENERAL: return "[Gen] ";
-            case CAPTAIN: return "[Capt] ";
-            case LIEUTENANT: return "[Lt] ";
-            case SERGEANT: return "[Sgt] ";
-            case CORPORAL: return "[Corp] ";
-            case RECRUIT: return "[Rec] ";
-            case FRIEND: return "[Friend] ";
-            default: return "";
-        }
     }
 
     private static class DarkScrollBar extends JScrollBar

@@ -5,6 +5,7 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -16,12 +17,22 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.FriendsChatManager;
 import net.runelite.api.FriendsChatMember;
 import net.runelite.api.FriendsChatRank;
 import net.runelite.api.WorldView;
+import net.runelite.api.clan.ClanChannel;
+import net.runelite.api.clan.ClanChannelMember;
+import net.runelite.api.clan.ClanMember;
+import net.runelite.api.clan.ClanRank;
+import net.runelite.api.clan.ClanSettings;
+import net.runelite.api.clan.ClanTitle;
+import net.runelite.api.events.ClanMemberJoined;
+import net.runelite.api.events.ClanMemberLeft;
 import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.FriendsChatMemberJoined;
@@ -45,8 +56,8 @@ import net.runelite.client.util.Text;
 
 @PluginDescriptor(
         name = "Presence Checker",
-        description = "Checks which Friends Chat members are currently in the vicinity",
-        tags = {"presence", "clan", "check","pvp","scout","fc","friends chat",}
+        description = "Checks which Friends Chat or Clan members are currently in the vicinity",
+        tags = {"presence", "clan", "check", "pvp", "scout", "fc"}
 )
 public class PresenceChecker extends Plugin
 {
@@ -81,7 +92,7 @@ public class PresenceChecker extends Plugin
     private Notifier notifier;
 
     private NavigationButton navButton;
-    private volatile List<FriendsChatMember> lastMissingMembers = Collections.emptyList();
+    private volatile List<PresenceMember> lastMissingMembers = Collections.emptyList();
     private ScheduledFuture<?> overlayTask;
     private long highlightStartTime = 0;
     private boolean isHighlighting = false;
@@ -89,15 +100,35 @@ public class PresenceChecker extends Plugin
     private final List<String> suspiciousDisplayList = new ArrayList<>();
     private final Map<String, Integer> suspiciousCounts = new HashMap<>();
 
+    // --- STATIC MAP FOR FAST TITLE LOOKUP ---
+    private static final Map<String, PresenceCheckerConfig.ClanRankOption> TITLE_MAP = new HashMap<>();
+
+    static {
+        for (PresenceCheckerConfig.ClanRankOption option : PresenceCheckerConfig.ClanRankOption.values()) {
+            if (option == PresenceCheckerConfig.ClanRankOption.NONE) continue;
+            if (option.name().startsWith("_SEC_")) continue;
+
+            // Map clean name (e.g. "Speed-Runner") to enum
+            String key = option.toString().toLowerCase();
+            TITLE_MAP.put(key, option);
+        }
+    }
+
+    @Getter
+    @RequiredArgsConstructor
+    public static class PresenceMember
+    {
+        private final String name;
+        private final String rankName;
+    }
+
     @Provides
-    @SuppressWarnings("unused")
     PresenceCheckerConfig provideConfig(ConfigManager configManager)
     {
         return configManager.getConfig(PresenceCheckerConfig.class);
     }
 
     @Override
-    @SuppressWarnings("unused")
     protected void startUp()
     {
         overlayManager.add(overlay);
@@ -147,43 +178,76 @@ public class PresenceChecker extends Plugin
         suspiciousCounts.clear();
     }
 
+    // --- EVENT LISTENERS ---
+
     @Subscribe
     public void onFriendsChatMemberJoined(FriendsChatMemberJoined event)
     {
-        if (!config.enableSuspiciousTracking()) return;
-
-        String name = Text.standardize(event.getMember().getName());
-
-        // Check Blacklist
-        if (isBlacklisted(name))
-        {
-            String msg = "BLACKLISTED PLAYER DETECTED: " + event.getMember().getName();
-            sendChatMessage(ColorUtil.wrapWithColorTag(msg, Color.RED));
-            notifier.notify("BLACKLISTED PLAYER: " + event.getMember().getName());
-            addSuspiciousUser(event.getMember().getName(), 0);
-            return;
-        }
-
-        if (shouldIgnoreSuspicious(event.getMember())) return;
-        joinTimes.put(name, System.currentTimeMillis());
+        if (config.chatMode() != PresenceCheckerConfig.ChatMode.FRIENDS_CHAT) return;
+        handleJoin(event.getMember().getName(), event.getMember().getRank(), null);
     }
 
     @Subscribe
     public void onFriendsChatMemberLeft(FriendsChatMemberLeft event)
     {
+        if (config.chatMode() != PresenceCheckerConfig.ChatMode.FRIENDS_CHAT) return;
+        handleLeave(event.getMember().getName(), event.getMember().getRank(), null);
+    }
+
+    @Subscribe
+    public void onClanMemberJoined(ClanMemberJoined event)
+    {
+        if (config.chatMode() == PresenceCheckerConfig.ChatMode.FRIENDS_CHAT) return;
+        boolean isGuest = (config.chatMode() == PresenceCheckerConfig.ChatMode.GUEST_CLAN_CHAT);
+        if (event.getClanChannel() == (isGuest ? client.getGuestClanChannel() : client.getClanChannel()))
+        {
+            handleJoin(event.getClanMember().getName(), null, event.getClanMember().getRank());
+        }
+    }
+
+    @Subscribe
+    public void onClanMemberLeft(ClanMemberLeft event)
+    {
+        if (config.chatMode() == PresenceCheckerConfig.ChatMode.FRIENDS_CHAT) return;
+        boolean isGuest = (config.chatMode() == PresenceCheckerConfig.ChatMode.GUEST_CLAN_CHAT);
+        if (event.getClanChannel() == (isGuest ? client.getGuestClanChannel() : client.getClanChannel()))
+        {
+            handleLeave(event.getClanMember().getName(), null, event.getClanMember().getRank());
+        }
+    }
+
+    private void handleJoin(String rawName, FriendsChatRank fcRank, ClanRank clanRank)
+    {
         if (!config.enableSuspiciousTracking()) return;
-        if (shouldIgnoreSuspicious(event.getMember())) return;
+        String name = Text.standardize(rawName);
 
-        String name = Text.standardize(event.getMember().getName());
+        if (isBlacklisted(name))
+        {
+            String msg = "BLACKLISTED PLAYER DETECTED: " + rawName;
+            sendChatMessage(ColorUtil.wrapWithColorTag(msg, Color.RED));
+            notifier.notify("BLACKLISTED PLAYER: " + rawName);
+            addSuspiciousUser(rawName, 0);
+            return;
+        }
+
+        if (shouldIgnoreSuspicious(name, fcRank, clanRank)) return;
+        joinTimes.put(name, System.currentTimeMillis());
+    }
+
+    private void handleLeave(String rawName, FriendsChatRank fcRank, ClanRank clanRank)
+    {
+        if (!config.enableSuspiciousTracking()) return;
+        String name = Text.standardize(rawName);
+        if (shouldIgnoreSuspicious(name, fcRank, clanRank)) return;
+
         Long joinTime = joinTimes.remove(name);
-
         if (joinTime != null)
         {
             long durationMs = System.currentTimeMillis() - joinTime;
             long thresholdMs = config.suspiciousThreshold();
             if (durationMs <= thresholdMs)
             {
-                addSuspiciousUser(event.getMember().getName(), durationMs);
+                addSuspiciousUser(rawName, durationMs);
             }
         }
     }
@@ -201,7 +265,7 @@ public class PresenceChecker extends Plugin
         int threshold = config.suspiciousWarningThreshold();
         if (threshold > 0 && count >= threshold)
         {
-            String msg = "WARNING: " + rawName + " Has been flagged Suspicious";
+            String msg = rawName + " was found suspicious! (" + durationMs + "ms)";
             sendChatMessage(ColorUtil.wrapWithColorTag(msg, config.suspiciousWarningColor()));
             notifier.notify(config.suspiciousNotification(), "Suspicious Activity Detected: " + rawName);
         }
@@ -222,33 +286,28 @@ public class PresenceChecker extends Plugin
         return blacklist.contains(name);
     }
 
-    private boolean shouldIgnoreSuspicious(FriendsChatMember member)
+    private boolean shouldIgnoreSuspicious(String rawName, FriendsChatRank fcRank, ClanRank clanRank)
     {
-        String name = Text.standardize(member.getName());
+        String name = Text.standardize(rawName);
         Set<String> whitelist = Text.fromCSV(config.friendlyWhitelist()).stream()
                 .map(Text::standardize)
                 .collect(Collectors.toSet());
 
         if (whitelist.contains(name)) return true;
 
-        FriendsChatRank rank = member.getRank();
-        switch (rank)
+        if (config.chatMode() == PresenceCheckerConfig.ChatMode.FRIENDS_CHAT && fcRank != null)
         {
-            case OWNER: return config.susHideOwner();
-            case GENERAL: return config.susHideGeneral();
-            case CAPTAIN: return config.susHideCaptain();
-            case LIEUTENANT: return config.susHideLieutenant();
-            case SERGEANT: return config.susHideSergeant();
-            case CORPORAL: return config.susHideCorporal();
-            case RECRUIT: return config.susHideRecruit();
-            case FRIEND: return config.susHideFriend();
-            case UNRANKED: return config.susHideGuest();
-            default: return config.susHideGuest();
+            return shouldHideRank(fcRank);
         }
+        else if (clanRank != null)
+        {
+            String realTitle = getRealClanRankTitle(rawName, config.chatMode() == PresenceCheckerConfig.ChatMode.GUEST_CLAN_CHAT);
+            return shouldHideByClanTitle(realTitle, clanRank);
+        }
+        return false;
     }
 
     @Subscribe
-    @SuppressWarnings("unused")
     public void onCommandExecuted(CommandExecuted commandExecuted)
     {
         if (commandExecuted.getCommand().equalsIgnoreCase("absent")) checkPresence();
@@ -258,6 +317,8 @@ public class PresenceChecker extends Plugin
     public void onClientTick(ClientTick event)
     {
         if (lastMissingMembers == null || lastMissingMembers.isEmpty()) return;
+
+        if (config.chatMode() != PresenceCheckerConfig.ChatMode.FRIENDS_CHAT) return;
 
         long durationMs = config.highlightDuration() * 1000L;
         long timeElapsed = System.currentTimeMillis() - highlightStartTime;
@@ -277,44 +338,36 @@ public class PresenceChecker extends Plugin
 
     private void backgroundScan()
     {
-        clientThread.invokeLater(() -> lastMissingMembers = scanForMissingMembers());
+        clientThread.invokeLater(() -> {
+            lastMissingMembers = scanForMissingMembers();
+            if (config.autoUpdatePanel())
+            {
+                SwingUtilities.invokeLater(() -> panel.updateMissingList(lastMissingMembers));
+            }
+        });
     }
 
     public void checkPresence()
     {
         clientThread.invokeLater(() ->
         {
-            FriendsChatManager friendsChatManager = client.getFriendsChatManager();
-            if (friendsChatManager == null)
-            {
-                lastMissingMembers = Collections.emptyList();
-                updatePanel(new ArrayList<>());
-                return;
-            }
-
-            List<FriendsChatMember> missingMembersList = scanForMissingMembers();
+            List<PresenceMember> missingMembersList = scanForMissingMembers();
             lastMissingMembers = missingMembersList;
             highlightStartTime = System.currentTimeMillis();
             isHighlighting = true;
 
-            if (missingMembersList.isEmpty())
+            SwingUtilities.invokeLater(() -> panel.updateMissingList(missingMembersList));
+
+            if (!missingMembersList.isEmpty() && config.chatMode() == PresenceCheckerConfig.ChatMode.FRIENDS_CHAT)
             {
-                updatePanel(new ArrayList<>());
-            }
-            else
-            {
-                updatePanel(missingMembersList);
                 int highlightColor = config.getHighlightColor().getRGB() & 0xFFFFFF;
                 setMemberColor(missingMembersList, highlightColor);
             }
         });
     }
 
-    private List<FriendsChatMember> scanForMissingMembers()
+    private List<PresenceMember> scanForMissingMembers()
     {
-        FriendsChatManager friendsChatManager = client.getFriendsChatManager();
-        if (friendsChatManager == null) return Collections.emptyList();
-
         WorldView worldView = client.getTopLevelWorldView();
         if (worldView == null) return Collections.emptyList();
 
@@ -323,26 +376,108 @@ public class PresenceChecker extends Plugin
                 .collect(Collectors.toList());
 
         String localName = client.getLocalPlayer() != null ? Text.standardize(client.getLocalPlayer().getName()) : "";
-        List<FriendsChatMember> missing = new ArrayList<>();
+        List<PresenceMember> missing = new ArrayList<>();
 
-        for (FriendsChatMember member : friendsChatManager.getMembers())
+        PresenceCheckerConfig.ChatMode mode = config.chatMode();
+
+        if (mode == PresenceCheckerConfig.ChatMode.FRIENDS_CHAT)
         {
-            String ccMemberName = Text.standardize(member.getName());
-            if (config.filterSelf() && ccMemberName.equals(localName)) continue;
-            if (shouldHideRank(member.getRank())) continue;
-            if (!localPlayerNames.contains(ccMemberName)) missing.add(member);
+            FriendsChatManager fcm = client.getFriendsChatManager();
+            if (fcm == null) return Collections.emptyList();
+
+            for (FriendsChatMember member : fcm.getMembers())
+            {
+                String name = Text.standardize(member.getName());
+                if (config.filterSelf() && name.equals(localName)) continue;
+                if (shouldHideRank(member.getRank())) continue;
+                if (!localPlayerNames.contains(name)) {
+                    missing.add(new PresenceMember(member.getName(), getRankPrefix(member.getRank())));
+                }
+            }
         }
+        else
+        {
+            boolean isGuest = (mode == PresenceCheckerConfig.ChatMode.GUEST_CLAN_CHAT);
+            ClanChannel channel = isGuest ? client.getGuestClanChannel() : client.getClanChannel();
+
+            if (channel == null) return Collections.emptyList();
+
+            for (ClanChannelMember member : channel.getMembers())
+            {
+                String name = Text.standardize(member.getName());
+                if (config.filterSelf() && name.equals(localName)) continue;
+
+                String realTitle = getRealClanRankTitle(member.getName(), isGuest);
+
+                if (shouldHideByClanTitle(realTitle, member.getRank())) continue;
+
+                if (!localPlayerNames.contains(name)) {
+                    String prefix = (realTitle != null) ? "[" + realTitle + "] " : getClanRankPrefix(member.getRank());
+                    missing.add(new PresenceMember(member.getName(), prefix));
+                }
+            }
+        }
+
         return missing;
     }
 
-    @SuppressWarnings("unused")
-    public int getMissingMembersCount() { return lastMissingMembers.size(); }
+    private String getRealClanRankTitle(String playerName, boolean isGuest)
+    {
+        if (isGuest) return null;
 
-    @SuppressWarnings("unused")
-    public List<FriendsChatMember> getMissingMembers() { return lastMissingMembers; }
+        ClanSettings settings = client.getClanSettings();
+        if (settings == null) return null;
+
+        ClanMember member = settings.findMember(playerName);
+        if (member == null) return null;
+
+        ClanRank rank = member.getRank();
+        ClanTitle title = settings.titleForRank(rank);
+
+        return (title != null) ? title.getName() : null;
+    }
+
+    private boolean shouldHideByClanTitle(String title, ClanRank fallbackRank)
+    {
+        List<PresenceCheckerConfig.ClanRankOption> filters = Arrays.asList(
+                config.filterRank1(), config.filterRank2(), config.filterRank3(), config.filterRank4(),
+                config.filterRank5(), config.filterRank6(), config.filterRank7(), config.filterRank8(),
+                config.filterRank9(), config.filterRank10(), config.filterRank11(), config.filterRank12(),
+                config.filterRank13(), config.filterRank14(), config.filterRank15(), config.filterRank16(),
+                config.filterRank17(), config.filterRank18(), config.filterRank19(), config.filterRank20(),
+                config.filterRank21(), config.filterRank22(), config.filterRank23(), config.filterRank24()
+        );
+
+        PresenceCheckerConfig.ClanRankOption currentMemberOption = matchPlayerToOption(title, fallbackRank);
+
+        if (currentMemberOption == PresenceCheckerConfig.ClanRankOption.NONE || currentMemberOption.toString().startsWith("---")) return false;
+
+        return filters.contains(currentMemberOption);
+    }
+
+    private PresenceCheckerConfig.ClanRankOption matchPlayerToOption(String title, ClanRank fallbackRank)
+    {
+        if (fallbackRank == ClanRank.OWNER) return PresenceCheckerConfig.ClanRankOption.OWNER;
+        if (fallbackRank == ClanRank.DEPUTY_OWNER) return PresenceCheckerConfig.ClanRankOption.DEPUTY_OWNER;
+        if (fallbackRank == ClanRank.ADMINISTRATOR) return PresenceCheckerConfig.ClanRankOption.ADMINISTRATOR;
+        if (fallbackRank == ClanRank.JMOD) return PresenceCheckerConfig.ClanRankOption.JMOD;
+        if (fallbackRank == ClanRank.GUEST) return PresenceCheckerConfig.ClanRankOption.GUEST;
+
+        if (title != null)
+        {
+            String key = title.toLowerCase();
+            if (TITLE_MAP.containsKey(key)) {
+                return TITLE_MAP.get(key);
+            }
+        }
+
+        return PresenceCheckerConfig.ClanRankOption.NONE;
+    }
+
+    public List<PresenceMember> getMissingMembers() { return lastMissingMembers; }
 
     @SuppressWarnings("deprecation")
-    private void setMemberColor(List<FriendsChatMember> members, int color)
+    private void setMemberColor(List<PresenceMember> members, int color)
     {
         Widget list = client.getWidget(ComponentID.FRIENDS_CHAT_LIST);
         if (list == null || list.getDynamicChildren() == null || list.isHidden()) return;
@@ -376,9 +511,29 @@ public class PresenceChecker extends Plugin
         }
     }
 
-    private void updatePanel(List<FriendsChatMember> missingMembers)
+    private String getRankPrefix(FriendsChatRank rank)
     {
-        SwingUtilities.invokeLater(() -> panel.updateMissingList(missingMembers));
+        switch (rank) {
+            case OWNER: return "[Owner] ";
+            case GENERAL: return "[Gen] ";
+            case CAPTAIN: return "[Capt] ";
+            case LIEUTENANT: return "[Lt] ";
+            case SERGEANT: return "[Sgt] ";
+            case CORPORAL: return "[Corp] ";
+            case RECRUIT: return "[Rec] ";
+            case FRIEND: return "[Friend] ";
+            default: return "";
+        }
+    }
+
+    private String getClanRankPrefix(ClanRank rank)
+    {
+        if (rank == ClanRank.OWNER) return "[Owner] ";
+        if (rank == ClanRank.DEPUTY_OWNER) return "[Dep] ";
+        if (rank == ClanRank.ADMINISTRATOR) return "[Adm] ";
+        if (rank == ClanRank.GUEST) return "[Guest] ";
+        if (rank == ClanRank.JMOD) return "[JMod] ";
+        return "[Memb] ";
     }
 
     private void sendChatMessage(String message)
