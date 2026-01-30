@@ -11,8 +11,7 @@ import net.runelite.client.config.Range;
 @ConfigGroup("presencechecker")
 public interface PresenceCheckerConfig extends Config
 {
-    // --- HELPERS & ENUMS ---
-
+    // --- THIS FIXED THE ERROR ---
     @ConfigItem(
             keyName = "showPanelTutorial",
             name = "Show Tutorial",
@@ -151,7 +150,7 @@ public interface PresenceCheckerConfig extends Config
         PYROMANCER("Pyromancer"), PRODIGY("Prodigy"), IGNITOR("Ignitor"),
         ARTISAN("Artisan"), LEGACY("Legacy"),
 
-        // --- SUIT SYMBOLS (Added these back as they are common) ---
+        // --- SUIT SYMBOLS ---
         SPADE("Spade"), CLUB("Club"), HEART("Heart"), DIAMOND_SUIT("Diamond"), BOLT("Bolt"), PROBOSCIS("Proboscis"), SMILEY("Smiley");
 
         private final String title;
